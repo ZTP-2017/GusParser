@@ -2,7 +2,7 @@
 {
     public class Commune : District
     {
-        public int CommuneId { get; set; }
+        public string CommuneId { get; set; }
         public string CommuneName { get; set; }
     }
 }

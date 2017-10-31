@@ -1,7 +1,8 @@
 ﻿namespace GusAnalyzer.Parser.Model
 {
-    public class City : Commune
+    public class Street : Commune
     {
+        public string StreetName { get; set; }
         public string CityName { get; set; }
     }
 }
