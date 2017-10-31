@@ -1,6 +1,4 @@
-﻿using System;
-using System.Collections.Generic;
-using System.Text;
+﻿using System.Collections.Generic;
 using GusAnalyzer.Parser.Model;
 using Autofac;
 using System.Xml.Linq;
@@ -13,32 +11,23 @@ namespace GusAnalyzer.Parser
         private List<Region> regions;
         private List<District> districts;
         private List<Commune> communes;
-        private List<City> cities;
 
         public void Init()
         {
             var container = AutofacContainer.Configure();
         }
 
-        public void ParseElements()
+        public List<GusItem> Parse()
         {
             XDocument xdocTerc = XDocument.Load("TERC.xml");
-            //XDocument xdocSimc = XDocument.Load("SIMC.xml");
-            var simc = GetSimc(XDocument.Load("SIMC.xml"));
-            XDocument xdocUlic = XDocument.Load("ULIC.xml");
-
             regions = GetRegions(xdocTerc);
             districts = GetDistricts(xdocTerc, regions);
             communes = GetCommunes(xdocTerc, districts);
-            cities = GetCities(simc, communes);
 
-            var streets = GetStreets(xdocUlic);
-            var test = streets.Where(x => x.CityName == "Wieprz");
-        }
-
-        private Dictionary<string, string> GetSimc(XDocument xdocSimc)
-        {
-
+            var simc = GetSimc(XDocument.Load("SIMC.xml"));
+            var ulic = GetUlic(XDocument.Load("ULIC.xml"));
+            
+            return GetResult(ulic, simc);
         }
 
         private List<Region> GetRegions(XDocument terc)
@@ -57,19 +46,16 @@ namespace GusAnalyzer.Parser
             {
                 var regionId = row.Element("WOJ").Value;
                 var districtId = row.Element("POW").Value;
+                
+                var region = regions.FirstOrDefault(z => z.RegionId == regionId);
 
-                if (!result.Any(y => y.DistrictId == districtId && y.RegionId == regionId))
+                result.Add(new District
                 {
-                    var region = regions.FirstOrDefault(z => z.RegionId == regionId);
-
-                    result.Add(new District
-                    {
-                        DistrictId = districtId,
-                        DistrictName = row.Element("NAZWA").Value,
-                        RegionId = region.RegionId,
-                        RegionName = region.RegionName
-                    });
-                }
+                    DistrictId = districtId,
+                    DistrictName = row.Element("NAZWA").Value,
+                    RegionId = region.RegionId,
+                    RegionName = region.RegionName
+                });
             }
 
             return result;
@@ -78,94 +64,115 @@ namespace GusAnalyzer.Parser
         private List<Commune> GetCommunes(XDocument terc, List<District> districts)
         {
             var result = new List<Commune>();
-
-            foreach (var row in terc.Descendants("row").Where(x => !string.IsNullOrEmpty(x.Element("WOJ").Value) &&
-                !string.IsNullOrEmpty(x.Element("POW").Value) && !string.IsNullOrEmpty(x.Element("GMI").Value)))
+            
+            foreach (var row in terc.Descendants("row").Where(x => !string.IsNullOrEmpty(x.Element("RODZ").Value)))
             {
                 var regionId = row.Element("WOJ").Value;
                 var districtId = row.Element("POW").Value;
                 var communeId = row.Element("GMI").Value;
+                var tercId = regionId + "-" + districtId + "-" + communeId;
 
-                if (!result.Any(y => y.CommuneId == communeId && y.RegionId == regionId && y.DistrictId == districtId))
+                var district = districts.FirstOrDefault(z => z.RegionId == regionId && z.DistrictId == districtId);
+
+                result.Add(new Commune
                 {
-                    var district = districts.FirstOrDefault(z => z.DistrictId == districtId);
+                    CommuneId = communeId,
+                    CommuneName = row.Element("NAZWA").Value,
+                    RegionId = district.RegionId,
+                    RegionName = district.RegionName,
+                    DistrictId = district.DistrictId,
+                    DistrictName = district.DistrictName,
+                    TercId = tercId
+                });
+            }
 
-                    result.Add(new Commune
-                    {
-                        CommuneId = communeId,
-                        CommuneName = row.Element("NAZWA").Value,
-                        RegionId = district.RegionId,
-                        RegionName = district.RegionName,
-                        DistrictId = district.DistrictId,
-                        DistrictName = district.DistrictName
-                    });
+            return result;
+        }
+
+        private Dictionary<string, List<City>> GetSimc(XDocument xdocSimc)
+        {
+            var result = new Dictionary<string, List<City>>();
+
+            foreach (var row in xdocSimc.Descendants("row"))
+            {
+                var key = row.Element("WOJ").Value + "-" + row.Element("POW").Value + "-" + row.Element("GMI").Value;
+                var simc = new City()
+                {
+                    CityName = row.Element("NAZWA").Value,
+                    CityId = row.Element("SYM").Value
+                };
+
+                if (result.ContainsKey(key))
+                {
+                    result[key].Add(simc);
+                }
+                else
+                {
+                    result.Add(key, new List<City>() { simc });
                 }
             }
 
             return result;
         }
 
-        private List<City> GetCities(Dictionary<string, string> simc, List<Commune> communes)
+        private Dictionary<string, List<Street>> GetUlic(XDocument xdocUlic)
         {
-            var result = new List<City>();
+            var result = new Dictionary<string, List<Street>>();
 
-            foreach (var row in simc.Descendants("row"))
+            foreach (var row in xdocUlic.Descendants("row"))
             {
-                var regionId = row.Element("WOJ").Value;
-                var districtId = row.Element("POW").Value;
-                var communeId = row.Element("GMI").Value;
-                var name = row.Element("NAZWA").Value;
-                var sym = row.Element("SYM").Value;
-
-                result.Add(new City
-                {
-                    RegionId = regionId,
-                    DistrictId = districtId,
-                    CommuneId = communeId,
-                    CityName = IsNumeric(sym) ? name : sym + " " + name
-                });
-            }
-
-            return result;
-        }
-
-        private List<Street> GetStreets(XDocument ulic)
-        {
-            var result = new List<Street>(); var i = 1;
-
-            foreach (var row in ulic.Descendants("row"))
-            {
-                var regionId = row.Element("WOJ").Value;
-                var districtId = row.Element("POW").Value;
-                var communeId = row.Element("GMI").Value;
+                var key = row.Element("WOJ").Value + "-" + row.Element("POW").Value + "-" + row.Element("GMI").Value;
                 var attribute = row.Element("CECHA").Value;
                 var name_1 = row.Element("NAZWA_1").Value;
                 var name_2 = row.Element("NAZWA_2").Value;
+                var name = attribute + " " + (string.IsNullOrEmpty(name_2) ? name_1 : name_2 + " " + name_1);
 
-                result.Add(new Street()
+                var ulic = new Street()
                 {
-                    RegionId = regionId,
-                    RegionName = regions.FirstOrDefault(x => x.RegionId == regionId).RegionName,
-                    DistrictId = districtId,
-                    DistrictName = districts.FirstOrDefault(x => x.DistrictId == districtId).DistrictName,
-                    CommuneId = communeId,
-                    CommuneName = communes.FirstOrDefault(x => x.CommuneId == communeId).CommuneName,
-                    StreetName = attribute + " " + (string.IsNullOrEmpty(name_2) ? name_1 : name_2 + " " + name_1),
-                    CityName = cities.FirstOrDefault(x => x.RegionId == regionId && x.DistrictId == districtId).CityName
-                });
+                    StreetName = name,
+                    StreetId = row.Element("SYM").Value
+                };
 
-                Console.WriteLine(i); i++;
+                if (result.ContainsKey(key))
+                {
+                    result[key].Add(ulic);
+                }
+                else
+                {
+                    result.Add(key, new List<Street>() { ulic });
+                }
             }
 
             return result;
         }
 
-        private bool IsNumeric(string value)
+        private List<GusItem> GetResult(Dictionary<string, List<Street>> ulic, Dictionary<string, List<City>> simc)
         {
-            double retNum;
+            var result = new List<GusItem>();
 
-            bool isNum = Double.TryParse(value, System.Globalization.NumberStyles.Any, System.Globalization.NumberFormatInfo.InvariantInfo, out retNum);
-            return isNum;
+            foreach (var u in ulic)
+            {
+                var tmp = u.Key.Split("-");
+                var regionId = tmp[0];
+                var districtId = tmp[1];
+
+                foreach (var street in u.Value)
+                {
+                    foreach (var city in simc[u.Key].Where(x => x.CityId == street.StreetId))
+                    {
+                        result.Add(new GusItem()
+                        {
+                            Region = regions.FirstOrDefault(x => x.RegionId == regionId).RegionName,
+                            District = districts.FirstOrDefault(x => x.RegionId == regionId && x.DistrictId == districtId).DistrictName,
+                            Commune = communes.FirstOrDefault(x => x.TercId == u.Key).CommuneName,
+                            Street = street.StreetName,
+                            City = city.CityName
+                        });
+                    }
+                }
+            }
+
+            return result;
         }
     }
 }

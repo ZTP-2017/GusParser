@@ -1,6 +1,4 @@
 ﻿using System;
-using Autofac;
-using Autofac.Extensions.DependencyInjection;
 
 namespace GusAnalyzer
 {
@@ -10,7 +8,7 @@ namespace GusAnalyzer
         {
             var parser = new GusAnalyzer.Parser.Parser();
             parser.Init();
-            parser.ParseElements();
+            var data = parser.Parse();
 
             Console.ReadKey();
         }
