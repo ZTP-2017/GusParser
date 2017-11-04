@@ -2,6 +2,8 @@
 using GusAnalyzer.Parser.Model;
 using System.Xml.Linq;
 using System.Linq;
+using Serilog;
+using System;
 
 namespace GusAnalyzer.Parser
 {
@@ -18,10 +20,16 @@ namespace GusAnalyzer.Parser
             {
                 data = new Data();
             }
+
+            Log.Logger = new LoggerConfiguration()
+                .WriteTo.LiterateConsole()
+                .WriteTo.RollingFile("logs/log-{Date}.txt")
+                .CreateLogger();
         }
 
         public List<GusItem> Parse()
         {
+            Log.Information("Start parsing");
             XDocument xdocTerc = data.LoadTerc();
 
             regions = GetRegions(xdocTerc);
@@ -36,9 +44,20 @@ namespace GusAnalyzer.Parser
 
         private List<Region> GetRegions(XDocument terc)
         {
-            return terc.Descendants("row")
-                .Where(x => !string.IsNullOrEmpty(x.Element("WOJ").Value) && string.IsNullOrEmpty(x.Element("POW").Value) && string.IsNullOrEmpty(x.Element("GMI").Value))
-                .Select(x => new Region(x.Element("WOJ").Value, x.Element("NAZWA").Value)).ToList();
+            var regions = new List<Region>();
+
+            try
+            {
+                regions = terc.Descendants("row")
+                    .Where(x => !string.IsNullOrEmpty(x.Element("WOJ").Value) && string.IsNullOrEmpty(x.Element("POW").Value) && string.IsNullOrEmpty(x.Element("GMI").Value))
+                    .Select(x => new Region(x.Element("WOJ").Value, x.Element("NAZWA").Value)).ToList();
+            }
+            catch (Exception ex)
+            {
+                Log.Error(ex, "Get regions error");
+            }
+
+            return regions;
         }
 
         private List<District> GetDistricts(XDocument terc, List<Region> regions)
@@ -48,18 +67,25 @@ namespace GusAnalyzer.Parser
             foreach (var row in terc.Descendants("row").Where(x => !string.IsNullOrEmpty(x.Element("WOJ").Value) &&
                 !string.IsNullOrEmpty(x.Element("POW").Value) && string.IsNullOrEmpty(x.Element("GMI").Value)))
             {
-                var regionId = row.Element("WOJ").Value;
-                var districtId = row.Element("POW").Value;
-                
-                var region = regions.FirstOrDefault(z => z.RegionId == regionId);
-
-                result.Add(new District
+                try
                 {
-                    DistrictId = districtId,
-                    DistrictName = row.Element("NAZWA").Value,
-                    RegionId = region.RegionId,
-                    RegionName = region.RegionName
-                });
+                    var regionId = row.Element("WOJ").Value;
+                    var districtId = row.Element("POW").Value;
+
+                    var region = regions.FirstOrDefault(z => z.RegionId == regionId);
+
+                    result.Add(new District
+                    {
+                        DistrictId = districtId,
+                        DistrictName = row.Element("NAZWA").Value,
+                        RegionId = region.RegionId,
+                        RegionName = region.RegionName
+                    });
+                }
+                catch (Exception ex)
+                {
+                    Log.Warning(ex, "Get district error");
+                }
             }
 
             return result;
@@ -71,23 +97,30 @@ namespace GusAnalyzer.Parser
             
             foreach (var row in terc.Descendants("row").Where(x => !string.IsNullOrEmpty(x.Element("RODZ").Value)))
             {
-                var regionId = row.Element("WOJ").Value;
-                var districtId = row.Element("POW").Value;
-                var communeId = row.Element("GMI").Value;
-                var tercId = regionId + "-" + districtId + "-" + communeId;
-
-                var district = districts.FirstOrDefault(z => z.RegionId == regionId && z.DistrictId == districtId);
-
-                result.Add(new Commune
+                try
                 {
-                    CommuneId = communeId,
-                    CommuneName = row.Element("NAZWA").Value,
-                    RegionId = district.RegionId,
-                    RegionName = district.RegionName,
-                    DistrictId = district.DistrictId,
-                    DistrictName = district.DistrictName,
-                    TercId = tercId
-                });
+                    var regionId = row.Element("WOJ").Value;
+                    var districtId = row.Element("POW").Value;
+                    var communeId = row.Element("GMI").Value;
+                    var tercId = regionId + "-" + districtId + "-" + communeId;
+
+                    var district = districts.FirstOrDefault(z => z.RegionId == regionId && z.DistrictId == districtId);
+
+                    result.Add(new Commune
+                    {
+                        CommuneId = communeId,
+                        CommuneName = row.Element("NAZWA").Value,
+                        RegionId = district.RegionId,
+                        RegionName = district.RegionName,
+                        DistrictId = district.DistrictId,
+                        DistrictName = district.DistrictName,
+                        TercId = tercId
+                    });
+                }
+                catch (Exception ex)
+                {
+                    Log.Warning(ex, "Get commune error");
+                }
             }
 
             return result;
@@ -99,20 +132,27 @@ namespace GusAnalyzer.Parser
 
             foreach (var row in xdocSimc.Descendants("row"))
             {
-                var key = row.Element("WOJ").Value + "-" + row.Element("POW").Value + "-" + row.Element("GMI").Value;
-                var simc = new City()
+                try
                 {
-                    CityName = row.Element("NAZWA").Value,
-                    CityId = row.Element("SYM").Value
-                };
+                    var key = row.Element("WOJ").Value + "-" + row.Element("POW").Value + "-" + row.Element("GMI").Value;
+                    var simc = new City()
+                    {
+                        CityName = row.Element("NAZWA").Value,
+                        CityId = row.Element("SYM").Value
+                    };
 
-                if (result.ContainsKey(key))
-                {
-                    result[key].Add(simc);
+                    if (result.ContainsKey(key))
+                    {
+                        result[key].Add(simc);
+                    }
+                    else
+                    {
+                        result.Add(key, new List<City>() { simc });
+                    }
                 }
-                else
+                catch (Exception ex)
                 {
-                    result.Add(key, new List<City>() { simc });
+                    Log.Warning(ex, "Get simc error");
                 }
             }
 
@@ -125,25 +165,32 @@ namespace GusAnalyzer.Parser
 
             foreach (var row in xdocUlic.Descendants("row"))
             {
-                var key = row.Element("WOJ").Value + "-" + row.Element("POW").Value + "-" + row.Element("GMI").Value;
-                var attribute = row.Element("CECHA").Value;
-                var name_1 = row.Element("NAZWA_1").Value;
-                var name_2 = row.Element("NAZWA_2").Value;
-                var name = attribute + " " + (string.IsNullOrEmpty(name_2) ? name_1 : name_2 + " " + name_1);
-
-                var ulic = new Street()
+                try
                 {
-                    StreetName = name,
-                    StreetId = row.Element("SYM").Value
-                };
+                    var key = row.Element("WOJ").Value + "-" + row.Element("POW").Value + "-" + row.Element("GMI").Value;
+                    var attribute = row.Element("CECHA").Value;
+                    var name_1 = row.Element("NAZWA_1").Value;
+                    var name_2 = row.Element("NAZWA_2").Value;
+                    var name = attribute + " " + (string.IsNullOrEmpty(name_2) ? name_1 : name_2 + " " + name_1);
 
-                if (result.ContainsKey(key))
-                {
-                    result[key].Add(ulic);
+                    var ulic = new Street()
+                    {
+                        StreetName = name,
+                        StreetId = row.Element("SYM").Value
+                    };
+
+                    if (result.ContainsKey(key))
+                    {
+                        result[key].Add(ulic);
+                    }
+                    else
+                    {
+                        result.Add(key, new List<Street>() { ulic });
+                    }
                 }
-                else
+                catch (Exception ex)
                 {
-                    result.Add(key, new List<Street>() { ulic });
+                    Log.Warning(ex, "Get ulic error");
                 }
             }
 
@@ -153,6 +200,7 @@ namespace GusAnalyzer.Parser
         private List<GusItem> GetResult(Dictionary<string, List<Street>> ulic, Dictionary<string, List<City>> simc)
         {
             var result = new List<GusItem>();
+            Log.Information("Parsing data");
 
             foreach (var u in ulic)
             {
@@ -175,6 +223,8 @@ namespace GusAnalyzer.Parser
                     }
                 }
             }
+
+            Log.Information("Parsing success. Parsed " + result.Count + " items");
 
             return result;
         }
