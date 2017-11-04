@@ -1,6 +1,5 @@
 ﻿using System.Collections.Generic;
 using GusAnalyzer.Parser.Model;
-using Autofac;
 using System.Xml.Linq;
 using System.Linq;
 
@@ -11,21 +10,26 @@ namespace GusAnalyzer.Parser
         private List<Region> regions;
         private List<District> districts;
         private List<Commune> communes;
+        private IData data;
 
-        public void Init()
+        public Parser()
         {
-            var container = AutofacContainer.Configure();
+            if (data == null)
+            {
+                data = new Data();
+            }
         }
 
         public List<GusItem> Parse()
         {
-            XDocument xdocTerc = XDocument.Load("TERC.xml");
+            XDocument xdocTerc = data.LoadTerc();
+
             regions = GetRegions(xdocTerc);
             districts = GetDistricts(xdocTerc, regions);
             communes = GetCommunes(xdocTerc, districts);
 
-            var simc = GetSimc(XDocument.Load("SIMC.xml"));
-            var ulic = GetUlic(XDocument.Load("ULIC.xml"));
+            var simc = GetSimc(data.LoadSimc());
+            var ulic = GetUlic(data.LoadUlic());
             
             return GetResult(ulic, simc);
         }

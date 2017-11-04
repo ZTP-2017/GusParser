@@ -4,10 +4,14 @@ namespace GusAnalyzer
 {
     class Program
     {
+        public Program()
+        {
+
+        }
+
         static void Main(string[] args)
         {
             var parser = new GusAnalyzer.Parser.Parser();
-            parser.Init();
             var data = parser.Parse();
 
             Console.ReadKey();
