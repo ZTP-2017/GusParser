@@ -14,7 +14,7 @@ namespace GusAnalyzer
 
             var parser = new Parser.Parser(new TercData(terc), new SimcData(simc), new UlicData(ulic));
 
-            var parsedData = parser.Parse();
+            parser.Parse();
 
             Console.ReadKey();
         }

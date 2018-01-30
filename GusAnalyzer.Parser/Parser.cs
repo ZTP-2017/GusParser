@@ -21,6 +21,7 @@ namespace GusAnalyzer.Parser
             Log.Logger = new LoggerConfiguration()
                 .WriteTo.LiterateConsole()
                 .WriteTo.RollingFile("logs/log-{Date}.txt")
+                .WriteTo.ColoredConsole()
                 .CreateLogger();
         }
 
