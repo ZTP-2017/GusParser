@@ -67,8 +67,8 @@ namespace GusAnalyzer.Parser
                 .Select(x => new
                 {
                     StreetName = x.Element("CECHA")?.Value + " " + (string.IsNullOrEmpty(x.Element("NAZWA_2")?.Value)
-                                     ? x.Element("NAZWA_1")?.Value
-                                     : x.Element("NAZWA_2")?.Value + " " + x.Element("NAZWA_1")?.Value),
+                        ? x.Element("NAZWA_1")?.Value
+                        : x.Element("NAZWA_2")?.Value + " " + x.Element("NAZWA_1")?.Value),
                     StreetId = x.Element("SYM")?.Value
                 }).Join(_simcData.GetSimc().Descendants(), x => x.StreetId, y => y.Element("SYM")?.Value, (x, y) => new
                 {
